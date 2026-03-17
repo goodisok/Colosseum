@@ -483,8 +483,9 @@ namespace airlib_rpclib
             msr::airlib::ImageCaptureBase::ImageType image_type;
             bool pixels_as_float;
             bool compress;
+            int compress_quality = 0;
 
-            MSGPACK_DEFINE_ARRAY(camera_name, image_type, pixels_as_float, compress);
+            MSGPACK_DEFINE_ARRAY(camera_name, image_type, pixels_as_float, compress, compress_quality);
 
             ImageRequest()
             {
@@ -495,12 +496,13 @@ namespace airlib_rpclib
                 , image_type(s.image_type)
                 , pixels_as_float(s.pixels_as_float)
                 , compress(s.compress)
+                , compress_quality(s.compress_quality)
             {
             }
 
             msr::airlib::ImageCaptureBase::ImageRequest to() const
             {
-                return { camera_name, image_type, pixels_as_float, compress };
+                return { camera_name, image_type, pixels_as_float, compress, compress_quality };
             }
 
             static std::vector<ImageRequest> from(

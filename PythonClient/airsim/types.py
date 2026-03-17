@@ -420,20 +420,23 @@ class ImageRequest(MsgpackMixin):
     image_type = ImageType.Scene
     pixels_as_float = False
     compress = False
+    compress_quality = 0  # 0=raw, -1=PNG, 1-100=JPEG quality
 
     attribute_order = [
         ('camera_name', str),
         ('image_type', int),
         ('pixels_as_float', bool),
-        ('compress', bool)
+        ('compress', bool),
+        ('compress_quality', int)
     ]
 
-    def __init__(self, camera_name, image_type, pixels_as_float=False, compress=True):
+    def __init__(self, camera_name, image_type, pixels_as_float=False, compress=True, compress_quality=0):
         # todo: in future remove str(), it's only for compatibility to pre v1.2
         self.camera_name = str(camera_name)
         self.image_type = image_type
         self.pixels_as_float = pixels_as_float
         self.compress = compress
+        self.compress_quality = compress_quality
 
 
 class ImageResponse(MsgpackMixin):

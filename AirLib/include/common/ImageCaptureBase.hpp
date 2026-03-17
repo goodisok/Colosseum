@@ -37,6 +37,7 @@ namespace airlib
             ImageCaptureBase::ImageType image_type = ImageCaptureBase::ImageType::Scene;
             bool pixels_as_float = false;
             bool compress = true;
+            int compress_quality = 0; // 0=raw, -1=PNG, 1-100=JPEG quality
 
             ImageRequest()
             {
@@ -45,11 +46,13 @@ namespace airlib
             ImageRequest(const std::string& camera_name_val,
                          ImageCaptureBase::ImageType image_type_val,
                          bool pixels_as_float_val = false,
-                         bool compress_val = true)
+                         bool compress_val = true,
+                         int compress_quality_val = 0)
                 : camera_name(camera_name_val)
                 , image_type(image_type_val)
                 , pixels_as_float(pixels_as_float_val)
                 , compress(compress_val)
+                , compress_quality(compress_quality_val)
             {
             }
         };

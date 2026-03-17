@@ -191,6 +191,7 @@ public:
     static void setUnrealClockSpeed(const AActor* context, float clock_speed);
     static IImageWrapperModule* getImageWrapperModule();
     static void CompressImageArray(int32 width, int32 height, const TArray<FColor>& src, TArray<uint8>& dest);
+    static void CompressImageArrayJPEG(int32 width, int32 height, const TArray<FColor>& src, TArray<uint8>& dest, int32 quality = 90);
     static std::vector<msr::airlib::MeshPositionVertexBuffersResponse> GetStaticMeshComponents();
 
 private:

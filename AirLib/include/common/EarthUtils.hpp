@@ -8,6 +8,7 @@
 #include <exception>
 #include "common/CommonStructs.hpp"
 #include "common/Common.hpp"
+#include "common/geomag.hpp"
 
 namespace msr
 {
@@ -43,60 +44,37 @@ namespace airlib
     public:
         //return declination in degrees
         //Ref: https://github.com/PX4/ecl/blob/master/EKF/geo.cpp
-        static real_T getMagDeclination(real_T latitude, real_T longitude)
+        static real_T getMagDeclination(real_T latitude, real_T longitude, real_T altitude = 0.0) // Altitude in kilometers
         {
-            /*
-        * If the values exceed valid ranges, return zero as default
-        * as we have no way of knowing what the closest real value
-        * would be.
-        */
-            if (latitude < -90.0f || latitude > 90.0f ||
-                longitude < -180.0f || longitude > 180.0f) {
-                throw std::out_of_range(Utils::stringf("invalid latitude (%f) or longitude (%f) value", latitude, longitude));
+            // Validate input ranges
+            if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+                throw std::out_of_range(Utils::stringf("Invalid latitude (%f) or longitude (%f) value", latitude, longitude));
             }
 
-            /* round down to nearest sampling resolution */
-            int min_lat = static_cast<int>(latitude / MAG_SAMPLING_RES) * MAG_SAMPLING_RES;
-            int min_lon = static_cast<int>(longitude / MAG_SAMPLING_RES) * MAG_SAMPLING_RES;
+            // Convert geodetic coordinates (latitude, longitude, altitude) to ECEF
+            geomag::Vector ecef_position = geomag::geodetic2ecef(
+                static_cast<float>(latitude),
+                static_cast<float>(longitude),
+                static_cast<float>(altitude * 1000) // Convert km to meters
+            );
 
-            /* for the rare case of hitting the bounds exactly
-        * the rounding logic wouldn't fit, so enforce it.
-        */
+            // Calculate the magnetic field in ECEF coordinates
+            geomag::Vector mag_field_ecef = geomag::GeoMag(
+                2025.0, // Replace with the current or desired year
+                ecef_position,
+                geomag::WMM2020 // Use the desired WMM model
+            );
 
-            /* limit to table bounds - required for maxima even when table spans full globe range */
-            if (latitude <= MAG_SAMPLING_MIN_LAT) {
-                min_lat = MAG_SAMPLING_MIN_LAT;
-            }
+            // Convert the magnetic field to magnetic elements
+            geomag::Elements mag_elements = geomag::magField2Elements(
+                mag_field_ecef,
+                static_cast<float>(latitude),
+                static_cast<float>(longitude)
+            );
 
-            if (latitude >= MAG_SAMPLING_MAX_LAT) {
-                min_lat = static_cast<int>(latitude / MAG_SAMPLING_RES) * MAG_SAMPLING_RES - MAG_SAMPLING_RES;
-            }
-
-            if (longitude <= MAG_SAMPLING_MIN_LON) {
-                min_lon = MAG_SAMPLING_MIN_LON;
-            }
-
-            if (longitude >= MAG_SAMPLING_MAX_LON) {
-                min_lon = static_cast<int>(longitude / MAG_SAMPLING_RES) * MAG_SAMPLING_RES - MAG_SAMPLING_RES;
-            }
-
-            /* find index of nearest low sampling point */
-            int min_lat_index = (-(MAG_SAMPLING_MIN_LAT) + min_lat) / MAG_SAMPLING_RES;
-            int min_lon_index = (-(MAG_SAMPLING_MIN_LON) + min_lon) / MAG_SAMPLING_RES;
-
-            real_T declination_sw = get_mag_lookup_table_val(min_lat_index, min_lon_index);
-            real_T declination_se = get_mag_lookup_table_val(min_lat_index, min_lon_index + 1);
-            real_T declination_ne = get_mag_lookup_table_val(min_lat_index + 1, min_lon_index + 1);
-            real_T declination_nw = get_mag_lookup_table_val(min_lat_index + 1, min_lon_index);
-
-            /* perform bilinear interpolation on the four grid corners */
-
-            real_T declination_min = ((longitude - min_lon) / MAG_SAMPLING_RES) * (declination_se - declination_sw) + declination_sw;
-            real_T declination_max = ((longitude - min_lon) / MAG_SAMPLING_RES) * (declination_ne - declination_nw) + declination_nw;
-
-            return ((latitude - min_lat) / MAG_SAMPLING_RES) * (declination_max - declination_min) + declination_min;
+            // Return declination in degrees
+            return static_cast<real_T>(mag_elements.declination);
         }
-
         //geopot_height = Earth_radius * altitude / (Earth_radius + altitude) /// all in kilometers
         //temperature is in Kelvin = 273.15 + celcius
         static real_T getStandardTemperature(real_T geopot_height)
@@ -209,83 +187,37 @@ namespace airlib
 
         static Vector3r getMagField(const GeoPoint& geo_point, double& declination, double& inclination) //return Tesla
         {
-            /*
-        We calculate magnetic field using simple dipol model of Earth, i.e., assume
-        earth as perfect dipole sphere and ignoring all but first order terms.
-        This obviously is inaccurate because of huge amount of irregularities, magnetic pole that is
-        constantly moving, shape of Earth, higher order terms, dipole that is not perfectly aligned etc.
-        For simulation we are not looking for actual values of magnetic field but rather if field changes
-        correctly as vehicle moves in any direction and if field component signs are correct. For this purpose, simple
-        diapole model is good enough. Keep in mind that actual field values may differ by as much as 10X in either direction
-        although for many tests differences seems to be within 3X or sometime even to first decimal digit. Again what matters is
-        how field changes wrt to movement as opposed to actual field values. To get better field strength one should use latest 
-        World Magnetic Model like WMM2015 from NOAA. However these recent model is fairly complex and very expensive to calculate. 
-        Other possibilities: 
-            - WMM2010 mocel, expensive to compute: http://williams.best.vwh.net/magvar/magfield.c
-            - Android's mag field calculation (still uses WMM2010 and fails at North Pole): https://goo.gl/1CZB9x
+            // Convert geodetic coordinates to ECEF
+            geomag::Vector ecef_position = geomag::geodetic2ecef(
+                static_cast<float>(geo_point.latitude),
+                static_cast<float>(geo_point.longitude),
+                static_cast<float>(geo_point.altitude)
+            );
 
-        Performance:
-            This function takes about 1 microsecond on Lenovo P50 laptop (Intel Xeon E3-1505M v5 CPU)
-            Basic trignometry functions runs at 30ns.
+            // Calculate the magnetic field in ECEF coordinates
+            geomag::Vector mag_field_ecef = geomag::GeoMag(
+                2025.0, // Replace with the appropriate year
+                ecef_position,
+                geomag::WMM2020 // Use the desired model
+            );
 
-        Accuracy:
-            Two points separated by sqrt(2 km)
-            Dipole Model:   2.50394e-05     3.40771e-06     3.6567e-05  (dec: 7.7500, inc: 55.3530)
-            WMM2015 Model:  1.8350e-05		5.201e-06		5.0158e-05  (dec: 15.8248, inc: 69.1805)
-            geo:            47.637  -122.147    622
+            // Convert the magnetic field to the seven magnetic elements, including declination and inclination
+            geomag::Elements mag_elements = geomag::magField2Elements(
+                mag_field_ecef,
+                static_cast<float>(geo_point.latitude),
+                static_cast<float>(geo_point.longitude)
+            );
 
-            Dipole Model:   2.5047e-05      3.41024e-06     3.65953e-05 (dec: 7.7536, inc: 55.36532)
-            WMM2015 Model:  1.8353e-05		5.203e-06		5.0191e-05  (dec: 15.8278, inc: 69.1897)
-            geo:            47.646  -122.134    -378
-        */
+            // Extract declination and inclination
+            declination = mag_elements.declination;
+            inclination = mag_elements.inclination;
 
-            //ref: The Earth's Magnetism: An Introduction for Geologists, Roberto Lanza, Antonio Meloni
-            //Sec 1.2.5, pg 27-30 https://goo.gl/bRm7wt
-            //some theory at http://www.tulane.edu/~sanelson/eens634/Hmwk6MagneticField.pdf
-
-            double lat = Utils::degreesToRadians(geo_point.latitude); //geographic colatitude
-            double lon = Utils::degreesToRadians(geo_point.longitude);
-            double altitude = geo_point.altitude + EARTH_RADIUS;
-
-            //cache value
-            double sin_MagPoleLat = sin(MagPoleLat);
-            double cos_MagPoleLat = cos(MagPoleLat);
-            double cos_lat = cos(lat);
-            double sin_lat = sin(lat);
-
-            //find magnetic colatitude
-            double mag_clat = acos(cos_lat * cos_MagPoleLat +
-                                   sin_lat * sin_MagPoleLat * cos(lon - MagPoleLon));
-
-            //calculation of magnetic longitude is not needed but just in case if someone wants it
-            //double mag_lon = asin(
-            //    (sin(lon - MagPoleLon) * sin(lat)) /
-            //    sin(mag_clat));
-
-            //field strength only depends on magnetic colatitude
-            //https://en.wikipedia.org/wiki/Dipole_model_of_the_Earth's_magnetic_field
-            double cos_mag_clat = cos(mag_clat);
-            double field_mag = MeanMagField * pow(EARTH_RADIUS / altitude, 3) *
-                               sqrt(1 + 3 * cos_mag_clat * cos_mag_clat);
-
-            //find inclination and declination
-            //equation of declination in above referenced book is only partial
-            //full equation is (4a) at http://www.tulane.edu/~sanelson/eens634/Hmwk6MagneticField.pdf
-            double lat_test = sin_MagPoleLat * sin_lat;
-            double dec_factor = cos_MagPoleLat / sin(mag_clat);
-            if (cos_mag_clat > lat_test)
-                declination = asin(sin(lon - MagPoleLon) * dec_factor);
-            else
-                declination = asin(cos(lon - MagPoleLon) * dec_factor);
-            inclination = atan(2.0 / tan(mag_clat)); //do not use atan2 here
-
-            //transform magnetic field vector to geographical coordinates
-            //ref: http://www.geo.mtu.edu/~jdiehl/magnotes.html
-            double field_xy = field_mag * cos(inclination);
+            // Return the magnetic field vector in Tesla
             return Vector3r(
-                static_cast<real_T>(field_xy * cos(declination)),
-                static_cast<real_T>(field_xy * sin(declination)),
-                static_cast<real_T>(field_mag * sin(inclination)));
+                mag_elements.north * 1E-9f,
+                mag_elements.east * 1E-9f,
+                mag_elements.down * 1E-9f
+            );
         }
 
         static GeoPoint nedToGeodetic(const Vector3r& v, const HomeGeoPoint& home_geo_point)

@@ -833,6 +833,29 @@ bool UAirBlueprintLib::CompressUsingImageWrapper(const TArray<uint8>& uncompress
     return bSucceeded;
 }
 
+void UAirBlueprintLib::CompressImageArrayJPEG(int32 width, int32 height, const TArray<FColor>& src, TArray<uint8>& dest, int32 quality)
+{
+    TArray<FColor> MutableSrcData = src;
+
+    for (int32 Index = 0; Index < width * height; Index++) {
+        uint8 TempRed = MutableSrcData[Index].R;
+        MutableSrcData[Index].R = MutableSrcData[Index].B;
+        MutableSrcData[Index].B = TempRed;
+    }
+
+    dest.Reset();
+    int32 MemorySize = width * height * sizeof(FColor);
+    TArray<uint8> RawData;
+    RawData.AddUninitialized(MemorySize);
+    FMemory::Memcpy(RawData.GetData(), MutableSrcData.GetData(), MemorySize);
+
+    IImageWrapperModule* ImageWrapperModule = UAirBlueprintLib::getImageWrapperModule();
+    TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule->CreateImageWrapper(EImageFormat::JPEG);
+    if (ImageWrapper.IsValid() && ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), width, height, ERGBFormat::RGBA, 8)) {
+        dest = ImageWrapper->GetCompressed(quality);
+    }
+}
+
 void UAirBlueprintLib::FindAllActorByTag(const UObject* context, FName tag, TArray<AActor*>& foundActors)
 {
     UGameplayStatics::GetAllActorsWithTag(context, tag, foundActors);

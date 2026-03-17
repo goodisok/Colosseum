@@ -6,7 +6,35 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/GameViewportClient.h"
 #include <memory>
+#include <vector>
 #include "common/Common.hpp"
+
+template <typename T>
+class BufferPool
+{
+public:
+    TArray<T> acquire()
+    {
+        FScopeLock lock(&mutex_);
+        if (pool_.size() > 0) {
+            TArray<T> buf = MoveTemp(pool_.back());
+            pool_.pop_back();
+            buf.Reset();
+            return buf;
+        }
+        return TArray<T>();
+    }
+
+    void release(TArray<T>&& buf)
+    {
+        FScopeLock lock(&mutex_);
+        pool_.push_back(MoveTemp(buf));
+    }
+
+private:
+    std::vector<TArray<T>> pool_;
+    FCriticalSection mutex_;
+};
 
 class RenderRequest : public FRenderCommand
 {
@@ -17,9 +45,10 @@ public:
         UTextureRenderTarget2D* render_target;
         bool pixels_as_float;
         bool compress;
+        int compress_quality;
 
-        RenderParams(USceneCaptureComponent2D* render_component_val, UTextureRenderTarget2D* render_target_val, bool pixels_as_float_val, bool compress_val)
-            : render_component(render_component_val), render_target(render_target_val), pixels_as_float(pixels_as_float_val), compress(compress_val)
+        RenderParams(USceneCaptureComponent2D* render_component_val, UTextureRenderTarget2D* render_target_val, bool pixels_as_float_val, bool compress_val, int compress_quality_val = 0)
+            : render_component(render_component_val), render_target(render_target_val), pixels_as_float(pixels_as_float_val), compress(compress_val), compress_quality(compress_quality_val)
         {
         }
     };
@@ -36,6 +65,18 @@ public:
 
         msr::airlib::TTimePoint time_stamp;
     };
+
+    static BufferPool<FColor>& getColorBufferPool()
+    {
+        static BufferPool<FColor> pool;
+        return pool;
+    }
+
+    static BufferPool<FFloat16Color>& getFloatBufferPool()
+    {
+        static BufferPool<FFloat16Color> pool;
+        return pool;
+    }
 
 private:
     static FReadSurfaceDataFlags setupRenderResource(const FTextureRenderTargetResource* rt_resource, const RenderParams* params, RenderResult* result, FIntPoint& size);
@@ -65,8 +106,6 @@ public:
         RETURN_QUICK_DECLARE_CYCLE_STAT(RenderRequest, STATGROUP_RenderThreadCommands);
     }
 
-    // read pixels from render target using render thread, then compress the result into PNG
-    // argument on the thread that calls this method.
     void getScreenshot(
         std::shared_ptr<RenderParams> params[], std::vector<std::shared_ptr<RenderResult>>& results, unsigned int req_size, bool use_safe_method);
 

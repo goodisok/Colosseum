@@ -20,26 +20,22 @@ RenderRequest::~RenderRequest()
 // argument on the thread that calls this method.
 void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::vector<std::shared_ptr<RenderResult>>& results, unsigned int req_size, bool use_safe_method)
 {
-    //TODO: is below really needed?
     for (unsigned int i = 0; i < req_size; ++i) {
         results.push_back(std::make_shared<RenderResult>());
 
         if (!params[i]->pixels_as_float)
-            results[i]->bmp.Reset();
+            results[i]->bmp = getColorBufferPool().acquire();
         else
-            results[i]->bmp_float.Reset();
+            results[i]->bmp_float = getFloatBufferPool().acquire();
         results[i]->time_stamp = 0;
     }
 
-    //make sure we are not on the rendering thread
     CheckNotBlockedOnRenderThread();
 
     if (use_safe_method) {
         for (unsigned int i = 0; i < req_size; ++i) {
-            //TODO: below doesn't work right now because it must be running in game thread
             FIntPoint img_size;
             if (!params[i]->pixels_as_float) {
-                //below is documented method but more expensive because it forces flush
                 FTextureRenderTargetResource* rt_resource = params[i]->render_target->GameThread_GetRenderTargetResource();
                 auto flags = setupRenderResource(rt_resource, params[i].get(), results[i].get(), img_size);
                 rt_resource->ReadPixels(results[i]->bmp, flags);
@@ -52,12 +48,10 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
         }
     }
     else {
-        //wait for render thread to pick up our task
         params_ = params;
         results_ = results.data();
         req_size_ = req_size;
 
-        // Queue up the task of querying camera pose in the game thread and synchronizing render thread with camera pose
         AsyncTask(ENamedThreads::GameThread, [this]() {
             check(IsInGameThread());
 
@@ -66,12 +60,8 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
             end_draw_handle_ = game_viewport_->OnEndDraw().AddLambda([this] {
                 check(IsInGameThread());
 
-                // capture CameraPose for this frame
                 query_camera_pose_cb_();
 
-                // The completion is called immeidately after GameThread sends the
-                // rendering commands to RenderThread. Hence, our ExecuteTask will
-                // execute *immediately* after RenderThread renders the scene!
                 RenderRequest* This = this;
                 ENQUEUE_RENDER_COMMAND(SceneDrawCompletion)
                 (
@@ -85,17 +75,12 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
                 game_viewport_->OnEndDraw().Remove(end_draw_handle_);
             });
 
-            // while we're still on GameThread, enqueue request for capture the scene!
             for (unsigned int i = 0; i < req_size_; ++i) {
                 params_[i]->render_component->CaptureSceneDeferred();
             }
         });
 
-        // wait for this task to complete
         while (!wait_signal_->waitFor(5)) {
-            // log a message and continue wait
-            // lamda function still references a few objects for which there is no refcount.
-            // Walking away will cause memory corruption, which is much more difficult to debug.
             UE_LOG(LogTemp, Warning, TEXT("Failed: timeout waiting for screenshot"));
         }
     }
@@ -103,25 +88,64 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
     for (unsigned int i = 0; i < req_size; ++i) {
         if (!params[i]->pixels_as_float) {
             if (results[i]->width != 0 && results[i]->height != 0) {
-                results[i]->image_data_uint8.SetNumUninitialized(results[i]->width * results[i]->height * 3, false);
-                if (params[i]->compress)
-                    UAirBlueprintLib::CompressImageArray(results[i]->width, results[i]->height, results[i]->bmp, results[i]->image_data_uint8);
+                const int32 w = results[i]->width;
+                const int32 h = results[i]->height;
+                const int32 bmp_count = results[i]->bmp.Num();
+                const int32 stride = (h > 0) ? (bmp_count / h) : w;
+
+                const bool need_strip = (stride != w);
+                TArray<FColor> stripped;
+                const TArray<FColor>& src_bmp = [&]() -> const TArray<FColor>& {
+                    if (need_strip) {
+                        stripped.SetNumUninitialized(w * h);
+                        const FColor* src = results[i]->bmp.GetData();
+                        FColor* dst = stripped.GetData();
+                        for (int32 row = 0; row < h; ++row) {
+                            FMemory::Memcpy(dst + row * w, src + row * stride, w * sizeof(FColor));
+                        }
+                        return stripped;
+                    }
+                    return results[i]->bmp;
+                }();
+
+                if (params[i]->compress_quality > 0) {
+                    UAirBlueprintLib::CompressImageArrayJPEG(w, h, src_bmp, results[i]->image_data_uint8, params[i]->compress_quality);
+                }
+                else if (params[i]->compress_quality == -1 || params[i]->compress) {
+                    UAirBlueprintLib::CompressImageArray(w, h, src_bmp, results[i]->image_data_uint8);
+                }
                 else {
+                    results[i]->image_data_uint8.SetNumUninitialized(w * h * 3, false);
                     uint8* ptr = results[i]->image_data_uint8.GetData();
-                    for (const auto& item : results[i]->bmp) {
-                        *ptr++ = item.B;
-                        *ptr++ = item.G;
-                        *ptr++ = item.R;
+                    const FColor* raw_src = results[i]->bmp.GetData();
+                    for (int32 row = 0; row < h; ++row) {
+                        const FColor* src_row = raw_src + row * stride;
+                        for (int32 col = 0; col < w; ++col) {
+                            *ptr++ = src_row[col].B;
+                            *ptr++ = src_row[col].G;
+                            *ptr++ = src_row[col].R;
+                        }
                     }
                 }
             }
+            getColorBufferPool().release(MoveTemp(results[i]->bmp));
         }
         else {
-            results[i]->image_data_float.SetNumUninitialized(results[i]->width * results[i]->height);
+            const int32 w = results[i]->width;
+            const int32 h = results[i]->height;
+            const int32 bmp_count = results[i]->bmp_float.Num();
+            const int32 stride = (h > 0) ? (bmp_count / h) : w;
+
+            results[i]->image_data_float.SetNumUninitialized(w * h);
             float* ptr = results[i]->image_data_float.GetData();
-            for (const auto& item : results[i]->bmp_float) {
-                *ptr++ = item.R.GetFloat();
+            const FFloat16Color* src = results[i]->bmp_float.GetData();
+            for (int32 row = 0; row < h; ++row) {
+                const FFloat16Color* src_row = src + row * stride;
+                for (int32 col = 0; col < w; ++col) {
+                    *ptr++ = src_row[col].R.GetFloat();
+                }
             }
+            getFloatBufferPool().release(MoveTemp(results[i]->bmp_float));
         }
     }
 }
@@ -148,10 +172,8 @@ void RenderRequest::ExecuteTask()
                 FIntPoint size;
                 auto flags = setupRenderResource(rt_resource, params_[i].get(), results_[i].get(), size);
 
-                //should we be using ENQUEUE_UNIQUE_RENDER_COMMAND_ONEPARAMETER which was in original commit by @saihv
-                //https://github.com/Microsoft/AirSim/pull/162/commits/63e80c43812300a8570b04ed42714a3f6949e63f#diff-56b790f9394f7ca1949ddbb320d8456fR64
                 if (!params_[i]->pixels_as_float) {
-                    //below is undocumented method that avoids flushing, but it seems to segfault every 2000 or so calls
+                    results_[i]->bmp.Reserve(size.X * size.Y);
                     RHICmdList.ReadSurfaceData(
                         rhi_texture,
                         FIntRect(0, 0, size.X, size.Y),
@@ -159,6 +181,7 @@ void RenderRequest::ExecuteTask()
                         flags);
                 }
                 else {
+                    results_[i]->bmp_float.Reserve(size.X * size.Y);
                     RHICmdList.ReadSurfaceFloatData(
                         rhi_texture,
                         FIntRect(0, 0, size.X, size.Y),
