@@ -260,10 +260,10 @@ private:
             mesh->bRenderCustomDepth = true;
         }
 
-        // Explicitly set the custom depth state on the components so the
-        // render state is marked dirty and the update actually takes effect
-        // immediately.
-        for (ULandscapeComponent* comp : mesh->LandscapeComponents) {
+        // Copy components first: SetRenderCustomDepth can mutate LandscapeComponents
+        // during iteration (UE 5.7+ enforces SparseArray ensure on ranged-for).
+        TArray<ULandscapeComponent*> landscape_components = mesh->LandscapeComponents;
+        for (ULandscapeComponent* comp : landscape_components) {
             if (object_id < 0) {
                 comp->SetRenderCustomDepth(false);
             }
@@ -284,7 +284,8 @@ private:
     {
         mesh->bRenderCustomDepth = enable;
 
-        for (ULandscapeComponent* comp : mesh->LandscapeComponents) {
+        TArray<ULandscapeComponent*> landscape_components = mesh->LandscapeComponents;
+        for (ULandscapeComponent* comp : landscape_components) {
             comp->SetRenderCustomDepth(enable);
         }
     }
