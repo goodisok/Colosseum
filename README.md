@@ -97,13 +97,17 @@ client.enableApiControl(True)
 
 ## 环境要求
 
-### 重要说明
-
-主分支现已使用 **Unreal Engine 5.03 及以上**版本。如需使用 UE 4.27，请切换到 `ue4.27` 分支。
-
 ### Unreal Engine 版本
 
-本仓库 **main 分支仅支持 Unreal Engine 5.6**。其他版本请查看对应分支。
+本分支（`feature/jpeg-geomag-px4`）面向 **Unreal Engine 5.7.x**，已在 **UE 5.7.4** 环境下开发与验证。示例工程 `Unreal/Environments/BlocksV2` 的 `EngineAssociation` 为 `5.7`，与 5.7.4 同属 5.7 小版本，可直接使用。
+
+| 分支 / 场景 | 推荐 UE 版本 |
+|-------------|--------------|
+| 本分支 `feature/jpeg-geomag-px4` | **UE 5.7.x**（如 5.7.4） |
+| 上游 `main` | UE 5.6 |
+| 旧版项目 | `ue4.27` 分支 → UE 4.27 |
+
+> 若 Epic Launcher 中安装路径为 `UE_5.7`，请确保该版本已设为 **Current**，再打开 `BlocksV2.uproject` 生成/刷新 `.sln`。
 
 ### 支持的操作系统
 
