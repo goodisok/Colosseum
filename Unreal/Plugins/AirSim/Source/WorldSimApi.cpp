@@ -914,6 +914,15 @@ std::vector<WorldSimApi::ImageCaptureBase::ImageResponse> WorldSimApi::getImages
     return responses;
 }
 
+std::vector<WorldSimApi::EncodedImageCaptureBase::EncodedImageResponse> WorldSimApi::getImagesEncoded(
+    const std::vector<EncodedImageCaptureBase::EncodedImageRequest>& requests, const std::string& vehicle_name, bool external) const
+{
+    std::vector<EncodedImageCaptureBase::EncodedImageResponse> responses;
+    const UnrealImageCapture* camera = simmode_->getImageCapture(vehicle_name, external);
+    const_cast<UnrealImageCapture*>(camera)->getImagesEncoded(requests, responses);
+    return responses;
+}
+
 std::vector<uint8_t> WorldSimApi::getImage(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) const
 {
     std::vector<ImageCaptureBase::ImageRequest> request{

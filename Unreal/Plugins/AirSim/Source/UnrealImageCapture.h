@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "PIPCamera.h"
 #include "common/ImageCaptureBase.hpp"
+#include "common/EncodedImageCaptureBase.hpp"
 #include "common/common_utils/UniqueValueMap.hpp"
 
 class UnrealImageCapture : public msr::airlib::ImageCaptureBase
@@ -15,7 +16,12 @@ public:
 
     virtual void getImages(const std::vector<ImageRequest>& requests, std::vector<ImageResponse>& responses) const override;
 
+    void getImagesEncoded(const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest>& requests,
+                          std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse>& responses) const;
+
 private:
+    void getEncodedSceneCaptureImage(const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest>& requests,
+                                     std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse>& responses) const;
     void getSceneCaptureImage(const std::vector<msr::airlib::ImageCaptureBase::ImageRequest>& requests,
                               std::vector<msr::airlib::ImageCaptureBase::ImageResponse>& responses, bool use_safe_method) const;
 

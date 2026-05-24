@@ -469,6 +469,79 @@ class ImageResponse(MsgpackMixin):
     ]
 
 
+class EncodeMode:
+    NvencH264 = 1
+    NvencHevc = 2
+    Png16 = 3
+    Exr = 4
+
+
+class EncodedPixFmt:
+    Yuv420 = 0
+    Yuv444 = 1
+    Gbrp = 2
+
+
+class EncodedImageRequest(MsgpackMixin):
+    camera_name = '0'
+    image_type = ImageType.Scene
+    encode_mode = EncodeMode.NvencH264
+    lossless = False
+    cq_or_qp = 23
+    gop_size = 1
+    pix_fmt = EncodedPixFmt.Yuv420
+
+    attribute_order = [
+        ('camera_name', str),
+        ('image_type', int),
+        ('encode_mode', int),
+        ('lossless', int),
+        ('cq_or_qp', int),
+        ('gop_size', int),
+        ('pix_fmt', int),
+    ]
+
+    def __init__(self, camera_name, image_type, encode_mode=EncodeMode.NvencH264,
+                 lossless=False, cq_or_qp=23, gop_size=1, pix_fmt=EncodedPixFmt.Yuv420):
+        self.camera_name = str(camera_name)
+        self.image_type = image_type
+        self.encode_mode = encode_mode
+        self.lossless = 1 if lossless else 0
+        self.cq_or_qp = cq_or_qp
+        self.gop_size = gop_size
+        self.pix_fmt = pix_fmt
+
+
+class EncodedImageResponse(MsgpackMixin):
+    bitstream = np.array([], dtype=np.uint8)
+    camera_name = ''
+    camera_position = Vector3r()
+    camera_orientation = Quaternionr()
+    time_stamp = np.uint64(0)
+    message = ''
+    width = 0
+    height = 0
+    image_type = ImageType.Scene
+    encode_mode = EncodeMode.NvencH264
+    pix_fmt = EncodedPixFmt.Yuv420
+    encoded_size = 0
+
+    attribute_order = [
+        ('bitstream', np.ndarray),
+        ('camera_name', str),
+        ('camera_position', Vector3r),
+        ('camera_orientation', Quaternionr),
+        ('time_stamp', np.uint64),
+        ('message', str),
+        ('width', int),
+        ('height', int),
+        ('image_type', int),
+        ('encode_mode', int),
+        ('pix_fmt', int),
+        ('encoded_size', int),
+    ]
+
+
 class CarControls(MsgpackMixin):
     throttle = 0.0
     steering = 0.0

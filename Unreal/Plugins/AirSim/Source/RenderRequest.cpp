@@ -3,6 +3,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Async/TaskGraphInterfaces.h"
 #include "ImageUtils.h"
+#include "RenderingThread.h"
 
 #include "AirBlueprintLib.h"
 #include "Async/Async.h"
@@ -62,6 +63,8 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
 
                 query_camera_pose_cb_();
 
+                FlushRenderingCommands();
+
                 RenderRequest* This = this;
                 ENQUEUE_RENDER_COMMAND(SceneDrawCompletion)
                 (
@@ -114,7 +117,7 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
                 else if (params[i]->compress_quality == -1 || params[i]->compress) {
                     UAirBlueprintLib::CompressImageArray(w, h, src_bmp, results[i]->image_data_uint8);
                 }
-                else {
+                else if (!params[i]->retain_color_buffer) {
                     results[i]->image_data_uint8.SetNumUninitialized(w * h * 3, false);
                     uint8* ptr = results[i]->image_data_uint8.GetData();
                     const FColor* raw_src = results[i]->bmp.GetData();
@@ -128,7 +131,8 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
                     }
                 }
             }
-            getColorBufferPool().release(MoveTemp(results[i]->bmp));
+            if (!params[i]->retain_color_buffer)
+                getColorBufferPool().release(MoveTemp(results[i]->bmp));
         }
         else {
             const int32 w = results[i]->width;
@@ -169,11 +173,18 @@ void RenderRequest::ExecuteTask()
             auto rt_resource = params_[i]->render_target->GetRenderTargetResource();
             if (rt_resource != nullptr) {
                 const FTextureRHIRef& rhi_texture = rt_resource->GetRenderTargetTexture();
+                if (!rhi_texture.IsValid()) {
+                    UE_LOG(LogTemp, Warning, TEXT("RenderRequest: invalid RHI texture, skipping readback"));
+                    results_[i]->time_stamp = msr::airlib::ClockFactory::get()->nowNanos();
+                    continue;
+                }
+
                 FIntPoint size;
                 auto flags = setupRenderResource(rt_resource, params_[i].get(), results_[i].get(), size);
 
                 if (!params_[i]->pixels_as_float) {
                     results_[i]->bmp.Reserve(size.X * size.Y);
+                    RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
                     RHICmdList.ReadSurfaceData(
                         rhi_texture,
                         FIntRect(0, 0, size.X, size.Y),
@@ -182,6 +193,7 @@ void RenderRequest::ExecuteTask()
                 }
                 else {
                     results_[i]->bmp_float.Reserve(size.X * size.Y);
+                    RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
                     RHICmdList.ReadSurfaceFloatData(
                         rhi_texture,
                         FIntRect(0, 0, size.X, size.Y),

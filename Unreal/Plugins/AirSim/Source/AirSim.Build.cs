@@ -90,6 +90,7 @@ public class AirSim : ModuleRules
 
         PublicIncludePaths.Add(Path.Combine(AirLibPath, "include"));
         PublicIncludePaths.Add(Path.Combine(AirLibPath, "deps", "eigen3"));
+        PrivateIncludePaths.Add(Path.Combine(ModulePath, "Nvenc"));
         AddOSLibDependencies(Target);
 
         SetupCompileMode(CompileMode.CppCompileWithRpc, Target);
@@ -105,6 +106,14 @@ public class AirSim : ModuleRules
             //for joystick support
             PublicAdditionalLibraries.Add("dinput8.lib");
             PublicAdditionalLibraries.Add("dxguid.lib");
+
+            // NVENC hardware encoding (dynamic load nvEncodeAPI64.dll)
+            PublicAdditionalLibraries.Add("d3d11.lib");
+            PublicDefinitions.Add("WITH_NVENC=1");
+        }
+        else
+        {
+            PublicDefinitions.Add("WITH_NVENC=0");
         }
 
         if (Target.Platform == UnrealTargetPlatform.Linux)

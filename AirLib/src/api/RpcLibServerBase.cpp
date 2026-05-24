@@ -149,6 +149,11 @@ namespace airlib
             return RpcLibAdaptorsBase::ImageResponse::from(response);
         });
 
+        pimpl_->server.bind("simGetImagesEncoded", [&](const std::vector<RpcLibAdaptorsBase::EncodedImageRequest>& request_adapter, const std::string& vehicle_name, bool external) -> vector<RpcLibAdaptorsBase::EncodedImageResponse> {
+            const auto& response = getWorldSimApi()->getImagesEncoded(RpcLibAdaptorsBase::EncodedImageRequest::to(request_adapter), vehicle_name, external);
+            return RpcLibAdaptorsBase::EncodedImageResponse::from(response);
+        });
+
         pimpl_->server.bind("simGetImage", [&](const std::string& camera_name, ImageCaptureBase::ImageType type, const std::string& vehicle_name, bool external) -> vector<uint8_t> {
             return getWorldSimApi()->getImage(type, CameraDetails(camera_name, vehicle_name, external));
         });

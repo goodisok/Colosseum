@@ -3,7 +3,18 @@
 #include "ImageUtils.h"
 
 #include "RenderRequest.h"
+#include "AirBlueprintLib.h"
+#include "Nvenc/EncodedImagePipeline.h"
 #include "common/ClockFactory.hpp"
+
+namespace
+{
+    FCriticalSection& GetCaptureMutex()
+    {
+        static FCriticalSection Mutex;
+        return Mutex;
+    }
+}
 
 UnrealImageCapture::UnrealImageCapture(const common_utils::UniqueValueMap<std::string, APIPCamera*>* cameras)
     : cameras_(cameras)
@@ -32,6 +43,8 @@ void UnrealImageCapture::getImages(const std::vector<msr::airlib::ImageCaptureBa
 void UnrealImageCapture::getSceneCaptureImage(const std::vector<msr::airlib::ImageCaptureBase::ImageRequest>& requests,
                                               std::vector<msr::airlib::ImageCaptureBase::ImageResponse>& responses, bool use_safe_method) const
 {
+    FScopeLock CaptureLock(&GetCaptureMutex());
+
     std::vector<std::shared_ptr<RenderRequest::RenderParams>> render_params;
     std::vector<std::shared_ptr<RenderRequest::RenderResult>> render_results;
 
@@ -112,6 +125,107 @@ void UnrealImageCapture::getSceneCaptureImage(const std::vector<msr::airlib::Ima
         response.width = render_results[i]->width;
         response.height = render_results[i]->height;
         response.image_type = request.image_type;
+    }
+}
+
+void UnrealImageCapture::getImagesEncoded(
+    const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest>& requests,
+    std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse>& responses) const
+{
+    if (cameras_->valsSize() == 0) {
+        for (unsigned int i = 0; i < requests.size(); ++i) {
+            responses.push_back(msr::airlib::EncodedImageCaptureBase::EncodedImageResponse());
+            responses.back().message = "camera is not set";
+        }
+    }
+    else {
+        getEncodedSceneCaptureImage(requests, responses);
+    }
+}
+
+void UnrealImageCapture::getEncodedSceneCaptureImage(
+    const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest>& requests,
+    std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse>& responses) const
+{
+    FScopeLock CaptureLock(&GetCaptureMutex());
+
+    UGameViewportClient* gameViewport = nullptr;
+    for (unsigned int i = 0; i < requests.size(); ++i) {
+        APIPCamera* camera = cameras_->at(requests.at(i).camera_name);
+        if (gameViewport == nullptr)
+            gameViewport = camera->GetWorld()->GetGameViewport();
+    }
+    if (gameViewport == nullptr)
+        return;
+
+    for (unsigned int i = 0; i < requests.size(); ++i) {
+        const auto& enc_req = requests.at(i);
+        msr::airlib::ImageCaptureBase::ImageRequest vis_req(
+            enc_req.camera_name, enc_req.image_type, false, false, 0);
+        APIPCamera* camera = cameras_->at(enc_req.camera_name);
+        const_cast<UnrealImageCapture*>(this)->updateCameraVisibility(camera, vis_req);
+
+        responses.push_back(msr::airlib::EncodedImageCaptureBase::EncodedImageResponse());
+        auto& response = responses.back();
+        response.camera_name = enc_req.camera_name;
+        response.image_type = enc_req.image_type;
+        response.encode_mode = enc_req.encode_mode;
+        response.pix_fmt = enc_req.pix_fmt;
+
+        UTextureRenderTarget2D* textureTarget = nullptr;
+        USceneCaptureComponent2D* capture = camera->getCaptureComponent(enc_req.image_type, false);
+        if (capture == nullptr) {
+            response.message = "Can't capture because camera type is not active";
+            continue;
+        }
+        if (capture->TextureTarget == nullptr) {
+            response.message = "Can't capture because texture target is null";
+            continue;
+        }
+        textureTarget = capture->TextureTarget;
+
+        std::shared_ptr<RenderRequest::RenderParams> render_param =
+            std::make_shared<RenderRequest::RenderParams>(capture, textureTarget, false, false, 0, true);
+        std::vector<std::shared_ptr<RenderRequest::RenderResult>> render_results;
+
+        auto query_camera_pose_cb = [this, &enc_req, &response]() {
+            APIPCamera* pose_camera = cameras_->at(enc_req.camera_name);
+            auto camera_pose = pose_camera->getPose();
+            response.camera_position = camera_pose.position;
+            response.camera_orientation = camera_pose.orientation;
+        };
+        RenderRequest render_request{ gameViewport, std::move(query_camera_pose_cb) };
+        render_request.getScreenshot(&render_param, render_results, 1, false);
+
+        if (render_results.empty()) {
+            response.message = "Capture failed";
+            continue;
+        }
+
+        response.time_stamp = render_results[0]->time_stamp;
+        response.width = render_results[0]->width;
+        response.height = render_results[0]->height;
+
+        if (render_results[0]->width == 0 || render_results[0]->height == 0) {
+            response.message = "Empty capture buffer";
+            RenderRequest::getColorBufferPool().release(MoveTemp(render_results[0]->bmp));
+            continue;
+        }
+
+        FEncodedFrame frame;
+        const bool ok = FEncodedImagePipeline::Get().EncodeRequest(
+            enc_req, render_results[0]->bmp, render_results[0]->width, render_results[0]->height, frame);
+        RenderRequest::getColorBufferPool().release(MoveTemp(render_results[0]->bmp));
+
+        if (!ok) {
+            response.message = TCHAR_TO_UTF8(*frame.Error);
+            continue;
+        }
+
+        response.bitstream.assign(frame.Bitstream.GetData(), frame.Bitstream.GetData() + frame.Bitstream.Num());
+        response.encoded_size = static_cast<int>(response.bitstream.size());
+        response.width = frame.Width;
+        response.height = frame.Height;
     }
 }
 

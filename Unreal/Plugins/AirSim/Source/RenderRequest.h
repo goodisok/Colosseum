@@ -46,9 +46,10 @@ public:
         bool pixels_as_float;
         bool compress;
         int compress_quality;
+        bool retain_color_buffer;
 
-        RenderParams(USceneCaptureComponent2D* render_component_val, UTextureRenderTarget2D* render_target_val, bool pixels_as_float_val, bool compress_val, int compress_quality_val = 0)
-            : render_component(render_component_val), render_target(render_target_val), pixels_as_float(pixels_as_float_val), compress(compress_val), compress_quality(compress_quality_val)
+        RenderParams(USceneCaptureComponent2D* render_component_val, UTextureRenderTarget2D* render_target_val, bool pixels_as_float_val, bool compress_val, int compress_quality_val = 0, bool retain_color_buffer_val = false)
+            : render_component(render_component_val), render_target(render_target_val), pixels_as_float(pixels_as_float_val), compress(compress_val), compress_quality(compress_quality_val), retain_color_buffer(retain_color_buffer_val)
         {
         }
     };

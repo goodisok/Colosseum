@@ -7,6 +7,7 @@
 #include "common/Common.hpp"
 #include "common/CommonStructs.hpp"
 #include "common/ImageCaptureBase.hpp"
+#include "common/EncodedImageCaptureBase.hpp"
 #include "sensors/imu/ImuBase.hpp"
 #include "sensors/barometer/BarometerBase.hpp"
 #include "sensors/magnetometer/MagnetometerBase.hpp"
@@ -115,6 +116,9 @@ namespace airlib
 
         vector<ImageCaptureBase::ImageResponse> simGetImages(vector<ImageCaptureBase::ImageRequest> request, const std::string& vehicle_name = "", bool external = false);
         vector<uint8_t> simGetImage(const std::string& camera_name, ImageCaptureBase::ImageType type, const std::string& vehicle_name = "", bool external = false);
+
+        vector<EncodedImageCaptureBase::EncodedImageResponse> simGetImagesEncoded(
+            vector<EncodedImageCaptureBase::EncodedImageRequest> request, const std::string& vehicle_name = "", bool external = false);
 
         //CinemAirSim
         std::vector<std::string> simGetPresetLensSettings(const std::string& camera_name, const std::string& vehicle_name = "", bool external = false);

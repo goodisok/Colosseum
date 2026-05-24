@@ -345,6 +345,20 @@ std::vector<WorldSimApi::ImageCaptureBase::ImageResponse> WorldSimApi::getImages
     return responses;
 }
 
+std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse> WorldSimApi::getImagesEncoded(
+    const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest>& requests,
+    const std::string& vehicle_name, bool external) const
+{
+    std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse> responses;
+    for (const auto& req : requests) {
+        msr::airlib::EncodedImageCaptureBase::EncodedImageResponse resp;
+        resp.camera_name = req.camera_name;
+        resp.message = "getImagesEncoded is not supported on unity";
+        responses.push_back(resp);
+    }
+    return responses;
+}
+
 std::vector<uint8_t> WorldSimApi::getImage(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) const
 {
     std::vector<ImageCaptureBase::ImageRequest> request{

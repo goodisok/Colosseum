@@ -309,6 +309,13 @@ class VehicleClient:
         responses_raw = self.client.call('simGetImages', requests, vehicle_name, external)
         return [ImageResponse.from_msgpack(response_raw) for response_raw in responses_raw]
 
+    def simGetImagesEncoded(self, requests, vehicle_name='', external=False):
+        """
+        Get GPU-encoded camera frames (NVENC H.264 / HEVC NAL bitstreams).
+        """
+        responses_raw = self.client.call('simGetImagesEncoded', requests, vehicle_name, external)
+        return [EncodedImageResponse.from_msgpack(response_raw) for response_raw in responses_raw]
+
 
 
 #CinemAirSim

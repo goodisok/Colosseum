@@ -9,6 +9,7 @@
 #include "physics/Kinematics.hpp"
 #include "physics/Environment.hpp"
 #include "common/ImageCaptureBase.hpp"
+#include "common/EncodedImageCaptureBase.hpp"
 #include "safety/SafetyEval.hpp"
 #include "api/WorldSimApiBase.hpp"
 
@@ -605,6 +606,138 @@ namespace airlib_rpclib
                 for (const auto& item : response)
                     response_adapter.push_back(ImageResponse(item));
 
+                return response_adapter;
+            }
+        };
+
+        struct EncodedImageRequest
+        {
+            std::string camera_name;
+            int image_type = 0;
+            int encode_mode = 1;
+            int lossless = 0;
+            int cq_or_qp = 23;
+            int gop_size = 1;
+            int pix_fmt = 0;
+
+            MSGPACK_DEFINE_ARRAY(camera_name, image_type, encode_mode, lossless, cq_or_qp, gop_size, pix_fmt);
+
+            EncodedImageRequest()
+            {
+            }
+
+            EncodedImageRequest(const msr::airlib::EncodedImageCaptureBase::EncodedImageRequest& s)
+                : camera_name(s.camera_name)
+                , image_type(static_cast<int>(s.image_type))
+                , encode_mode(static_cast<int>(s.encode_mode))
+                , lossless(s.lossless ? 1 : 0)
+                , cq_or_qp(s.cq_or_qp)
+                , gop_size(s.gop_size)
+                , pix_fmt(static_cast<int>(s.pix_fmt))
+            {
+            }
+
+            msr::airlib::EncodedImageCaptureBase::EncodedImageRequest to() const
+            {
+                return msr::airlib::EncodedImageCaptureBase::EncodedImageRequest(
+                    camera_name,
+                    static_cast<msr::airlib::ImageCaptureBase::ImageType>(image_type),
+                    static_cast<msr::airlib::EncodedImageCaptureBase::EncodeMode>(encode_mode),
+                    lossless != 0,
+                    cq_or_qp,
+                    gop_size,
+                    static_cast<msr::airlib::EncodedImageCaptureBase::EncodedPixFmt>(pix_fmt));
+            }
+
+            static std::vector<EncodedImageRequest> from(
+                const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest>& request)
+            {
+                std::vector<EncodedImageRequest> request_adaptor;
+                for (const auto& item : request)
+                    request_adaptor.push_back(EncodedImageRequest(item));
+                return request_adaptor;
+            }
+
+            static std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest> to(
+                const std::vector<EncodedImageRequest>& request_adapter)
+            {
+                std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageRequest> request;
+                for (const auto& item : request_adapter)
+                    request.push_back(item.to());
+                return request;
+            }
+        };
+
+        struct EncodedImageResponse
+        {
+            std::vector<uint8_t> bitstream;
+            std::string camera_name;
+            Vector3r camera_position;
+            Quaternionr camera_orientation;
+            msr::airlib::TTimePoint time_stamp = 0;
+            std::string message;
+            int width = 0, height = 0;
+            int image_type = 0;
+            int encode_mode = 1;
+            int pix_fmt = 0;
+            int encoded_size = 0;
+
+            MSGPACK_DEFINE_ARRAY(bitstream, camera_name, camera_position, camera_orientation, time_stamp,
+                               message, width, height, image_type, encode_mode, pix_fmt, encoded_size);
+
+            EncodedImageResponse()
+            {
+            }
+
+            EncodedImageResponse(const msr::airlib::EncodedImageCaptureBase::EncodedImageResponse& s)
+            {
+                bitstream = s.bitstream;
+                camera_name = s.camera_name;
+                camera_position = Vector3r(s.camera_position);
+                camera_orientation = Quaternionr(s.camera_orientation);
+                time_stamp = s.time_stamp;
+                message = s.message;
+                width = s.width;
+                height = s.height;
+                image_type = static_cast<int>(s.image_type);
+                encode_mode = static_cast<int>(s.encode_mode);
+                pix_fmt = static_cast<int>(s.pix_fmt);
+                encoded_size = s.encoded_size;
+            }
+
+            msr::airlib::EncodedImageCaptureBase::EncodedImageResponse to() const
+            {
+                msr::airlib::EncodedImageCaptureBase::EncodedImageResponse d;
+                d.bitstream = bitstream;
+                d.camera_name = camera_name;
+                d.camera_position = camera_position.to();
+                d.camera_orientation = camera_orientation.to();
+                d.time_stamp = time_stamp;
+                d.message = message;
+                d.width = width;
+                d.height = height;
+                d.image_type = static_cast<msr::airlib::ImageCaptureBase::ImageType>(image_type);
+                d.encode_mode = static_cast<msr::airlib::EncodedImageCaptureBase::EncodeMode>(encode_mode);
+                d.pix_fmt = static_cast<msr::airlib::EncodedImageCaptureBase::EncodedPixFmt>(pix_fmt);
+                d.encoded_size = encoded_size;
+                return d;
+            }
+
+            static std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse> to(
+                const std::vector<EncodedImageResponse>& response_adapter)
+            {
+                std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse> response;
+                for (const auto& item : response_adapter)
+                    response.push_back(item.to());
+                return response;
+            }
+
+            static std::vector<EncodedImageResponse> from(
+                const std::vector<msr::airlib::EncodedImageCaptureBase::EncodedImageResponse>& response)
+            {
+                std::vector<EncodedImageResponse> response_adapter;
+                for (const auto& item : response)
+                    response_adapter.push_back(EncodedImageResponse(item));
                 return response_adapter;
             }
         };

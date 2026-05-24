@@ -6,6 +6,7 @@
 
 #include "common/CommonStructs.hpp"
 #include "common/ImageCaptureBase.hpp"
+#include "common/EncodedImageCaptureBase.hpp"
 
 namespace msr
 {
@@ -107,6 +108,10 @@ namespace airlib
         virtual std::vector<ImageCaptureBase::ImageResponse> getImages(const std::vector<ImageCaptureBase::ImageRequest>& requests,
                                                                        const std::string& vehicle_name, bool external) const = 0;
         virtual std::vector<uint8_t> getImage(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) const = 0;
+
+        virtual std::vector<EncodedImageCaptureBase::EncodedImageResponse> getImagesEncoded(
+            const std::vector<EncodedImageCaptureBase::EncodedImageRequest>& requests,
+            const std::string& vehicle_name, bool external) const = 0;
 
         //CinemAirSim
         virtual std::vector<std::string> getPresetLensSettings(const CameraDetails& camera_details) = 0;
